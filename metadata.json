@@ -1,0 +1,6 @@
+{
+  "name": "LinkedList Lab - Interactive Data Structure Simulator",
+  "description": "A minimal, highly interactive simulator for teaching linked list concepts with drag-and-drop nodes, real-time dynamic pointer updates, step-by-step algorithms, and hands-on challenges.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

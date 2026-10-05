@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  code, pre, kbd, samp, .font-mono {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+}
+
+.canvas-grid {
+  background-size: 24px 24px;
+  background-image: radial-gradient(circle, rgba(148, 163, 184, 0.12) 1.2px, transparent 1.2px);
+}
+
+.canvas-grid-subtle {
+  background-size: 16px 16px;
+  background-image: radial-gradient(circle, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.25);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.45);
+}
+
+/* Prevent text selection when dragging on canvas */
+.select-none-all {
+  -webkit-user-select: none;
+  user-select: none;
+}
