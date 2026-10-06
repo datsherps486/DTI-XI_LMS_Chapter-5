@@ -148,8 +148,8 @@ export function computeListTopology(
 export function layoutNodesHorizontally(
   orderedNodes: LLNode[],
   detachedNodes: LLNode[] = [],
-  startX: number = 80,
-  startY: number = 200,
+  startX: number = 40,
+  startY: number = 40,
   gapX: number = 220
 ): LLNode[] {
   const result: LLNode[] = [];
@@ -166,7 +166,7 @@ export function layoutNodesHorizontally(
     result.push({
       ...node,
       x: startX + idx * gapX,
-      y: startY + 220,
+      y: startY + 180,
     });
   });
 

@@ -1,0 +1,61 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default-deny global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // User profile document: users/{userId}
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create, update: if isOwner(userId)
+        && request.resource.data.id == userId
+        && request.resource.data.email is string
+        && request.resource.data.email.size() <= 254;
+      allow delete: if isOwner(userId);
+
+      // User progress subcollection: users/{userId}/progress/{progressId}
+      match /progress/{progressId} {
+        allow get, list: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && isValidId(progressId)
+          && request.resource.data.userId == userId;
+        allow delete: if isOwner(userId);
+      }
+
+      // User saved lists subcollection: users/{userId}/savedLists/{listId}
+      match /savedLists/{listId} {
+        allow get, list: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && isValidId(listId)
+          && request.resource.data.userId == userId
+          && request.resource.data.name is string
+          && request.resource.data.name.size() <= 100
+          && request.resource.data.mode is string;
+        allow delete: if isOwner(userId);
+      }
+
+      // User chats subcollection: users/{userId}/chats/{chatId}
+      match /chats/{chatId} {
+        allow get, list: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && isValidId(chatId)
+          && request.resource.data.userId == userId;
+        allow delete: if isOwner(userId);
+      }
+    }
+  }
+}

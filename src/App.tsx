@@ -25,21 +25,59 @@ import {
 } from './algorithms/linkedListAlgorithms';
 
 import { TopBar, ActiveTab } from './components/Navigation/TopBar';
+import { Sidebar } from './components/Navigation/Sidebar';
 import { InteractiveCanvas } from './components/Canvas/InteractiveCanvas';
 import { OperationToolbar } from './components/Controls/OperationToolbar';
 import { AlgorithmPlayer } from './components/Controls/AlgorithmPlayer';
 import { ActiveChallengeBanner } from './components/Controls/ActiveChallengeBanner';
-import { CodeExplanationPanel } from './components/Panels/CodeExplanationPanel';
 import { ComparisonPanel } from './components/Panels/ComparisonPanel';
 import { ChallengesPanel } from './components/Panels/ChallengesPanel';
 import { LinearDataStructuresPanel } from './components/Panels/LinearDataStructuresPanel';
 import { TextbookActivitiesPanel } from './components/Panels/TextbookActivitiesPanel';
 import { ChapterChecklistPanel } from './components/Panels/ChapterChecklistPanel';
+import { SavedListsModal } from './components/Modals/SavedListsModal';
+import { GeminiChatbot } from './components/Chat/GeminiChatbot';
+import { Sparkles } from 'lucide-react';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import {
+  SavedListDoc,
+  fetchUserProgress,
+  saveUserProgress,
+} from './services/firestoreService';
 
-export default function App() {
+function LinkedListApp() {
+  const { user } = useAuth();
+
   // Navigation & View Mode
   const [activeTab, setActiveTab] = useState<ActiveTab>('visualizer');
   const [isMuted, setIsMuted] = useState<boolean>(() => soundManager.getMuted());
+  const [isCloudModalOpen, setIsCloudModalOpen] = useState<boolean>(false);
+  const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    try {
+      const saved = localStorage.getItem('app_theme');
+      return saved === 'light' || saved === 'dark' ? saved : 'dark';
+    } catch {
+      return 'dark';
+    }
+  });
+
+  // Apply theme to document element
+  useEffect(() => {
+    document.documentElement.classList.remove('dark', 'light');
+    document.documentElement.classList.add(theme);
+    try {
+      localStorage.setItem('app_theme', theme);
+    } catch {
+      // ignore
+    }
+  }, [theme]);
+
+  const handleToggleTheme = () => {
+    soundManager.playClick();
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  };
 
   // Linked List State
   const defaultPreset = PRESETS[0];
@@ -64,9 +102,35 @@ export default function App() {
   const [algorithmSteps, setAlgorithmSteps] = useState<AlgorithmStep[]>([]);
   const [currentStepIndex, setCurrentStepIndex] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1000);
+  const [playbackSpeed, setPlaybackSpeed] = useState<number>(2200);
   // Backup state before algorithm starts so reset is seamless
   const [preAlgorithmState, setPreAlgorithmState] = useState<{ nodes: LLNode[]; headId: string | null } | null>(null);
+
+  // Sync user progress from Firestore when user logs in
+  useEffect(() => {
+    if (!user) return;
+    let isMounted = true;
+    fetchUserProgress(user.uid)
+      .then((progress) => {
+        if (!isMounted || !progress) return;
+        if (progress.solvedChallenges && progress.solvedChallenges.length > 0) {
+          setSolvedChallengeIds((prev) => {
+            const merged = new Set([...prev, ...progress.solvedChallenges]);
+            try {
+              localStorage.setItem('linkedlist_solved_challenges', JSON.stringify(Array.from(merged)));
+            } catch {
+              // ignore
+            }
+            return merged;
+          });
+        }
+      })
+      .catch((err) => console.error('Failed to fetch user progress:', err));
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
 
   // Compute live list topology
   const topology = useMemo(() => {
@@ -97,10 +161,15 @@ export default function App() {
       } catch {
         // ignore
       }
+      if (user) {
+        saveUserProgress(user.uid, Array.from(nextSet), []).catch((err) =>
+          console.error('Failed to sync progress to cloud:', err)
+        );
+      }
       soundManager.playSuccess();
       fireConfetti();
     }
-  }, [activeChallenge, isCurrentChallengeSolved, solvedChallengeIds]);
+  }, [activeChallenge, isCurrentChallengeSolved, solvedChallengeIds, user]);
 
   // Audio mute toggle
   const handleToggleMute = () => {
@@ -115,10 +184,10 @@ export default function App() {
     const newId = 'node_' + Math.random().toString(36).substring(2, 9);
     const newAddress = generateMemoryAddress();
 
-    // Determine smart placement coordinates
+    // Determine smart placement coordinates aligned from top-left
     const lastNode = nodes[nodes.length - 1];
-    const newX = lastNode ? lastNode.x + 190 : 120;
-    const newY = lastNode ? lastNode.y : 220;
+    const newX = lastNode ? lastNode.x + 210 : 40;
+    const newY = lastNode ? lastNode.y : 40;
 
     const newNode: LLNode = {
       id: newId,
@@ -130,7 +199,14 @@ export default function App() {
       address: newAddress,
     };
 
-    const nextNodes = [...nodes, newNode];
+    const updatedExistingNodes = nodes.map((n, idx) => {
+      if (idx === nodes.length - 1 && mode === 'doubly' && n.nextId === null) {
+        return { ...n, nextId: newId };
+      }
+      return n;
+    });
+
+    const nextNodes = [...updatedExistingNodes, newNode];
     if (nodes.length === 0) {
       setHeadId(newId);
     }
@@ -151,7 +227,6 @@ export default function App() {
   // Delete node
   const handleDeleteNode = (nodeId: string) => {
     setNodes((prev) => {
-      // Unlink references to deleted node
       const updated = prev
         .filter((n) => n.id !== nodeId)
         .map((n) => ({
@@ -217,6 +292,18 @@ export default function App() {
     setActiveOperation(null);
     setAlgorithmSteps([]);
     setIsPlaying(false);
+  };
+
+  // Load Cloud Saved List into simulator
+  const handleLoadSavedList = (saved: SavedListDoc) => {
+    setNodes(saved.nodes);
+    setHeadId(saved.headId);
+    setMode(saved.mode);
+    setActiveOperation(null);
+    setAlgorithmSteps([]);
+    setCurrentStepIndex(0);
+    setIsPlaying(false);
+    setActiveChallengeId(null);
   };
 
   // Start Challenge
@@ -318,17 +405,6 @@ export default function App() {
     }
   };
 
-  const handleAlgorithmReset = () => {
-    soundManager.playClick();
-    if (preAlgorithmState) {
-      setNodes(preAlgorithmState.nodes);
-      setHeadId(preAlgorithmState.headId);
-    }
-    setActiveOperation(null);
-    setAlgorithmSteps([]);
-    setIsPlaying(false);
-  };
-
   // Randomize values
   const handleRandomize = () => {
     setNodes((prev) =>
@@ -349,7 +425,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-indigo-500/30">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-indigo-500/30 overflow-hidden">
       {/* Top Bar */}
       <TopBar
         activeTab={activeTab}
@@ -357,57 +433,75 @@ export default function App() {
         onAddNode={() => handleAddNode()}
         onResetLayout={handleResetLayout}
         onResetToOriginal={handleResetToOriginal}
+        onOpenCloudModal={() => setIsCloudModalOpen(true)}
+        onOpenChat={() => setIsChatOpen(true)}
         isMuted={isMuted}
         onToggleMute={handleToggleMute}
+        onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        isSidebarCollapsed={isSidebarCollapsed}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-4">
-        {/* Visualizer View */}
-        {activeTab === 'visualizer' && (
-          <div className="space-y-4">
-            {/* Active Challenge Alert Banner */}
-            {activeChallenge && (
-              <ActiveChallengeBanner
-                challenge={activeChallenge}
-                isSolved={isCurrentChallengeSolved}
-                onReset={handleResetChallenge}
-                onExit={handleExitChallenge}
-                onNextChallenge={handleNextChallenge}
-              />
-            )}
+      {/* Main Body: Collapsible Left Sidebar + Workspace */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Collapsible Left Margin Sidebar */}
+        <Sidebar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          onSelectPreset={handleSelectPreset}
+          onOpenChat={() => setIsChatOpen(true)}
+          onOpenCloudModal={() => setIsCloudModalOpen(true)}
+        />
 
-            {/* Top Toolbar */}
-            <OperationToolbar
-              mode={mode}
-              onModeChange={setMode}
-              onSelectPreset={handleSelectPreset}
-              onRunOperation={handleRunOperation}
-              onRandomize={handleRandomize}
-              onClear={handleClear}
-              onResetToOriginal={handleResetToOriginal}
-              disabled={isPlaying}
-            />
+        {/* Workspace: Maximized Canvas and Content Panels */}
+        <main className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-4">
+          {/* Visualizer View */}
+          {activeTab === 'visualizer' && (
+            <div className="space-y-4">
+              {/* Active Challenge Alert Banner */}
+              {activeChallenge && (
+                <ActiveChallengeBanner
+                  challenge={activeChallenge}
+                  isSolved={isCurrentChallengeSolved}
+                  onReset={handleResetChallenge}
+                  onExit={handleExitChallenge}
+                  onNextChallenge={handleNextChallenge}
+                />
+              )}
 
-            {/* Algorithm Stepper Deck when an algorithm is executing */}
-            {algorithmSteps.length > 0 && (
-              <AlgorithmPlayer
-                steps={algorithmSteps}
-                currentStepIndex={currentStepIndex}
-                isPlaying={isPlaying}
-                playbackSpeed={playbackSpeed}
-                onStepChange={handleStepChange}
-                onTogglePlay={() => setIsPlaying(!isPlaying)}
-                onSpeedChange={setPlaybackSpeed}
-                onReset={() => handleStepChange(0)}
+              {/* Top Toolbar */}
+              <OperationToolbar
+                mode={mode}
+                onModeChange={setMode}
+                onSelectPreset={handleSelectPreset}
+                onRunOperation={handleRunOperation}
+                onRandomize={handleRandomize}
+                onClear={handleClear}
                 onResetToOriginal={handleResetToOriginal}
+                onOpenCloudModal={() => setIsCloudModalOpen(true)}
+                disabled={isPlaying}
               />
-            )}
 
-            {/* Two-Zone Layout: Interactive Canvas + Live Code / Inspector */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-              {/* Interactive SVG & Node Canvas */}
-              <div className={`${algorithmSteps.length > 0 ? 'lg:col-span-8' : 'lg:col-span-12'} h-[560px]`}>
+              {/* Algorithm Stepper Deck when an algorithm is executing */}
+              {algorithmSteps.length > 0 && (
+                <AlgorithmPlayer
+                  steps={algorithmSteps}
+                  currentStepIndex={currentStepIndex}
+                  isPlaying={isPlaying}
+                  playbackSpeed={playbackSpeed}
+                  onStepChange={handleStepChange}
+                  onTogglePlay={() => setIsPlaying(!isPlaying)}
+                  onSpeedChange={setPlaybackSpeed}
+                  onReset={() => handleStepChange(0)}
+                  onResetToOriginal={handleResetToOriginal}
+                />
+              )}
+
+              {/* Maximized Full-Width Interactive Canvas */}
+              <div className="w-full h-[620px] relative">
                 <InteractiveCanvas
                   nodes={nodes}
                   headId={headId}
@@ -423,72 +517,101 @@ export default function App() {
                 />
               </div>
 
-              {/* Synchronized Code & Concept Panel during algorithm execution */}
-              {algorithmSteps.length > 0 && (
-                <div className="lg:col-span-4 h-[560px]">
-                  <CodeExplanationPanel
-                    operation={activeOperation || 'insertHead'}
-                    activeLine={currentStep ? currentStep.codeLine : 1}
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* List Topology Status Bar */}
-            <div className="p-3 bg-slate-900/60 border border-slate-800 rounded-xl flex items-center justify-between text-xs text-slate-400 flex-wrap gap-2">
-              <div className="flex items-center gap-3">
-                <span className="flex items-center gap-1.5 font-medium">
-                  <span className="w-2 h-2 rounded-full bg-indigo-400" />
-                  Length: <strong className="text-slate-200 tabular-nums">{topology.nodeCount}</strong>
-                </span>
-                <span className="text-slate-600">·</span>
-                <span className="flex items-center gap-1.5 font-medium">
-                  Status: {topology.hasCycle ? (
-                    <strong className="text-amber-400">Cycle Detected</strong>
-                  ) : (
-                    <strong className="text-emerald-400">Acyclic (Linear)</strong>
+              {/* List Topology Status Bar */}
+              <div className="p-3 bg-slate-900/60 border border-slate-800 rounded-xl flex items-center justify-between text-xs text-slate-400 flex-wrap gap-2">
+                <div className="flex items-center gap-3">
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <span className="w-2 h-2 rounded-full bg-indigo-400" />
+                    Length: <strong className="text-slate-200 tabular-nums">{topology.nodeCount}</strong>
+                  </span>
+                  <span className="text-slate-600">·</span>
+                  <span className="flex items-center gap-1.5 font-medium">
+                    Status: {topology.hasCycle ? (
+                      <strong className="text-amber-400">Cycle Detected</strong>
+                    ) : (
+                      <strong className="text-emerald-400">Acyclic (Linear)</strong>
+                    )}
+                  </span>
+                  {topology.detachedNodes.length > 0 && (
+                    <>
+                      <span className="text-slate-600">·</span>
+                      <span className="text-amber-400 font-medium">
+                        {topology.detachedNodes.length} orphan {topology.detachedNodes.length === 1 ? 'node' : 'nodes'}
+                      </span>
+                    </>
                   )}
-                </span>
-                {topology.detachedNodes.length > 0 && (
-                  <>
-                    <span className="text-slate-600">·</span>
-                    <span className="text-amber-400 font-medium">
-                      {topology.detachedNodes.length} orphan {topology.detachedNodes.length === 1 ? 'node' : 'nodes'}
-                    </span>
-                  </>
-                )}
-              </div>
+                </div>
 
-              <div className="font-mono text-[11px] text-slate-400">
-                Mode: <span className="text-indigo-300 uppercase">{mode}</span>
+                <div className="font-mono text-[11px] text-slate-400">
+                  Mode: <span className="text-indigo-300 uppercase">{mode}</span>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Tab 2: Class XI Activities & Scenario Cards (Act 5.04, 5.05, 5.08, Unplugged 5.01) */}
-        {activeTab === 'scenarios' && <TextbookActivitiesPanel />}
+          {/* Tab 2: Class XI Activities & Scenario Cards (Act 5.04, 5.05, 5.08, Unplugged 5.01) */}
+          {activeTab === 'scenarios' && <TextbookActivitiesPanel />}
 
-        {/* Tab 3: Stacks & Queues (Sections 5.2 & 5.3) */}
-        {activeTab === 'linearDS' && <LinearDataStructuresPanel />}
+          {/* Tab 3: Stacks & Queues (Sections 5.2 & 5.3) */}
+          {activeTab === 'linearDS' && <LinearDataStructuresPanel />}
 
-        {/* Tab 4: Chapter 5 Review & Checklist (p. 82-83) */}
-        {activeTab === 'checklist' && <ChapterChecklistPanel />}
+          {/* Tab 4: Chapter 5 Review & Checklist (p. 82-83) */}
+          {activeTab === 'checklist' && <ChapterChecklistPanel />}
 
-        {/* Tab 5: Syllabus Interactive Challenges */}
-        {activeTab === 'challenges' && (
-          <ChallengesPanel
-            activeChallengeId={activeChallengeId}
-            solvedChallengeIds={solvedChallengeIds}
-            onSelectChallenge={handleSelectChallenge}
-            onExitChallenge={handleExitChallenge}
-            onResetChallenge={handleResetChallenge}
-          />
-        )}
+          {/* Tab 5: Syllabus Interactive Challenges */}
+          {activeTab === 'challenges' && (
+            <ChallengesPanel
+              activeChallengeId={activeChallengeId}
+              solvedChallengeIds={solvedChallengeIds}
+              onSelectChallenge={handleSelectChallenge}
+              onExitChallenge={handleExitChallenge}
+              onResetChallenge={handleResetChallenge}
+            />
+          )}
 
-        {/* Tab 6: Array vs List Contiguous Memory Comparison */}
-        {activeTab === 'comparison' && <ComparisonPanel />}
-      </main>
+          {/* Tab 6: Array vs List Contiguous Memory Comparison */}
+          {activeTab === 'comparison' && <ComparisonPanel />}
+        </main>
+      </div>
+
+      {/* Cloud Saved Lists Modal */}
+      <SavedListsModal
+        isOpen={isCloudModalOpen}
+        onClose={() => setIsCloudModalOpen(false)}
+        currentNodes={nodes}
+        currentHeadId={headId}
+        currentMode={mode}
+        onLoadList={handleLoadSavedList}
+      />
+
+      {/* Floating Gemini AI Chatbot Launcher Button */}
+      <button
+        onClick={() => {
+          soundManager.playClick();
+          setIsChatOpen(true);
+        }}
+        className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5 px-4 py-3 bg-gradient-to-r from-indigo-600 via-indigo-500 to-sky-500 hover:from-indigo-500 hover:to-sky-400 text-white rounded-full shadow-2xl hover:shadow-indigo-500/30 transition-all transform hover:scale-105 group font-semibold text-xs sm:text-sm border border-indigo-400/30"
+        title="Open Gemini AI DSA Tutor"
+      >
+        <Sparkles className="w-4 h-4 text-amber-200 animate-pulse" />
+        <span>Gemini AI Tutor</span>
+        <span className="w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-emerald-400/40" />
+      </button>
+
+      {/* Gemini AI Multi-Turn Chatbot Dialog */}
+      <GeminiChatbot
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        userId={user?.uid}
+      />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <LinkedListApp />
+    </AuthProvider>
   );
 }

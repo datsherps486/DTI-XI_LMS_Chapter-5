@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   CHAPTER_5_KEY_WORDS,
   CHAPTER_5_PRACTICE_QUESTIONS,
@@ -6,6 +6,8 @@ import {
 } from '../../data/chapter5Data';
 import { soundManager } from '../../utils/audio';
 import { fireConfetti } from '../../utils/confetti';
+import { useAuth } from '../../context/AuthContext';
+import { fetchUserProgress, saveUserProgress } from '../../services/firestoreService';
 import {
   CheckSquare,
   Square,
@@ -17,6 +19,7 @@ import {
 } from 'lucide-react';
 
 export const ChapterChecklistPanel: React.FC = () => {
+  const { user } = useAuth();
   const [checkedItems, setCheckedItems] = useState<Set<number>>(() => {
     try {
       const saved = localStorage.getItem('chapter5_checklist_progress');
@@ -27,6 +30,27 @@ export const ChapterChecklistPanel: React.FC = () => {
   });
 
   const [expandedQuestionId, setExpandedQuestionId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    let isMounted = true;
+    fetchUserProgress(user.uid).then((progress) => {
+      if (!isMounted || !progress) return;
+      if (progress.completedChecklist && progress.completedChecklist.length > 0) {
+        setCheckedItems((prev) => {
+          const merged = new Set([...prev, ...progress.completedChecklist]);
+          try {
+            localStorage.setItem('chapter5_checklist_progress', JSON.stringify(Array.from(merged)));
+          } catch {}
+          return merged;
+        });
+      }
+    }).catch(console.error);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
 
   const toggleCheck = (idx: number) => {
     soundManager.playClick();
@@ -45,6 +69,10 @@ export const ChapterChecklistPanel: React.FC = () => {
       localStorage.setItem('chapter5_checklist_progress', JSON.stringify(Array.from(nextSet)));
     } catch {
       // ignore
+    }
+
+    if (user) {
+      saveUserProgress(user.uid, [], Array.from(nextSet)).catch(console.error);
     }
   };
 

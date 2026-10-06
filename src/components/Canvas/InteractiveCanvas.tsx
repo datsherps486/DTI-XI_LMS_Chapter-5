@@ -61,8 +61,8 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   onConnectPointers,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [zoom, setZoom] = useState<number>(1);
-  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 40, y: 30 });
+  const [zoom, setZoom] = useState<number>(0.8);
+  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 20, y: 20 });
   const [isPanMode, setIsPanMode] = useState<boolean>(false);
 
   const [draggingNode, setDraggingNode] = useState<DraggingNodeState | null>(null);
@@ -212,8 +212,8 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
   const handleResetView = () => {
     soundManager.playClick();
-    setZoom(1);
-    setPan({ x: 40, y: 30 });
+    setZoom(0.8);
+    setPan({ x: 20, y: 20 });
   };
 
   // Wheel zoom
@@ -338,7 +338,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               refY="5"
               markerWidth="7"
               markerHeight="7"
-              orient="auto-start-reverse"
+              orient="auto"
             >
               <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#38bdf8" />
             </marker>
@@ -351,7 +351,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               refY="5"
               markerWidth="7"
               markerHeight="7"
-              orient="auto-start-reverse"
+              orient="auto"
             >
               <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#f59e0b" />
             </marker>
@@ -364,7 +364,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               refY="5"
               markerWidth="7"
               markerHeight="7"
-              orient="auto-start-reverse"
+              orient="auto"
             >
               <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#a855f7" />
             </marker>
@@ -377,7 +377,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               refY="5"
               markerWidth="7"
               markerHeight="7"
-              orient="auto-start-reverse"
+              orient="auto"
             >
               <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#10b981" />
             </marker>
@@ -390,7 +390,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               refY="5"
               markerWidth="7"
               markerHeight="7"
-              orient="auto-start-reverse"
+              orient="auto"
             >
               <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#6366f1" />
             </marker>
@@ -403,7 +403,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               refY="5"
               markerWidth="6"
               markerHeight="6"
-              orient="auto-start-reverse"
+              orient="auto"
             >
               <path d="M 0 2 L 6 5 L 0 8 z" fill="#64748b" />
             </marker>
@@ -440,10 +440,11 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               topology.cycleNodeIds.has(sourceNode.id) &&
               topology.cycleNodeIds.has(targetNode.id);
 
-            const startX = sourceNode.x + 146;
-            const startY = sourceNode.y + 48;
+            const isDoubly = mode === 'doubly';
+            const startX = sourceNode.x + 152;
+            const startY = isDoubly ? sourceNode.y + 34 : sourceNode.y + 48;
             const endX = targetNode.x - 4;
-            const endY = targetNode.y + 48;
+            const endY = isDoubly ? targetNode.y + 34 : targetNode.y + 48;
 
             let color = '#38bdf8';
             if (isCycle) color = '#f59e0b';
@@ -461,7 +462,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                 color={color}
                 isSelfLoop={isSelf}
                 isCycle={isCycle && !isSelf}
-                label={isCycle ? 'cycle' : undefined}
+                label={isDoubly ? 'next' : isCycle ? 'cycle' : undefined}
                 onDisconnect={() => {
                   soundManager.playDisconnect();
                   onConnectPointers(sourceNode.id, null, 'next');
@@ -470,18 +471,18 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             );
           })}
 
-          {/* Render PREV Pointers (Doubly Linked List mode) */}
+          {/* Render PREV Pointers (Doubly Linked List mode: from current node backwards to previous node) */}
           {mode === 'doubly' &&
             nodes.map((sourceNode) => {
               if (!sourceNode.prevId) return null;
               const targetNode = nodes.find((n) => n.id === sourceNode.prevId);
               if (!targetNode) return null;
 
-              // Prev port connects from left of source to right of target
-              const startX = sourceNode.x + 14;
-              const startY = sourceNode.y + 36;
-              const endX = targetNode.x + 146;
-              const endY = targetNode.y + 36;
+              // Backward prev arrow runs along lower parallel track
+              const startX = sourceNode.x + 4;
+              const startY = sourceNode.y + 58;
+              const endX = targetNode.x + 154;
+              const endY = targetNode.y + 58;
 
               return (
                 <PointerArrow
@@ -492,6 +493,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                   endY={endY}
                   color="#a855f7"
                   label="prev"
+                  isPrevPointer={true}
                   onDisconnect={() => {
                     soundManager.playDisconnect();
                     onConnectPointers(sourceNode.id, null, 'prev');
@@ -499,6 +501,51 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                 />
               );
             })}
+
+          {/* Head Node PREV NULL Terminator (Doubly Linked List mode) */}
+          {mode === 'doubly' && headId && (() => {
+            const headNode = nodes.find((n) => n.id === headId);
+            if (!headNode || headNode.prevId) return null;
+            const startX = headNode.x + 4;
+            const startY = headNode.y + 58;
+            const endX = headNode.x - 45;
+            const endY = headNode.y + 58;
+
+            return (
+              <g key="head-prev-null">
+                <PointerArrow
+                  startX={startX}
+                  startY={startY}
+                  endX={endX}
+                  endY={endY}
+                  color="#64748b"
+                  label="prev"
+                  isPrevPointer={true}
+                />
+                <g transform={`translate(${headNode.x - 110}, ${headNode.y + 44})`}>
+                  <rect
+                    width="55"
+                    height="28"
+                    rx="6"
+                    fill="rgba(15, 23, 42, 0.9)"
+                    stroke="#475569"
+                    strokeWidth="1.2"
+                  />
+                  <text
+                    x="27.5"
+                    y="18"
+                    fill="#94a3b8"
+                    fontSize="10"
+                    fontFamily="JetBrains Mono"
+                    fontWeight="600"
+                    textAnchor="middle"
+                  >
+                    NULL
+                  </text>
+                </g>
+              </g>
+            );
+          })()}
 
           {/* Dynamic Wire when currently dragging to connect */}
           {linkingState && (

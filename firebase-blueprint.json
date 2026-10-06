@@ -1,0 +1,156 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Authenticated user profile in the application.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique user ID matching request.auth.uid"
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Account creation timestamp"
+        }
+      },
+      "required": ["id", "email"]
+    },
+    "UserProgress": {
+      "title": "Chapter 5 Progress",
+      "description": "User learning progress in Chapter 5 curriculum.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner user ID"
+        },
+        "solvedChallenges": {
+          "type": "array",
+          "description": "IDs of challenges completed by the user"
+        },
+        "completedChecklist": {
+          "type": "array",
+          "description": "Indices of checklist items marked"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last update timestamp"
+        }
+      },
+      "required": ["userId"]
+    },
+    "SavedList": {
+      "title": "Saved Linked List",
+      "description": "Custom linked list configuration saved by the user.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique list identifier"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner user ID"
+        },
+        "name": {
+          "type": "string",
+          "description": "Title of the saved list",
+          "maxLength": 100
+        },
+        "mode": {
+          "type": "string",
+          "description": "List mode (singly, doubly, circular, playground)"
+        },
+        "nodes": {
+          "type": "array",
+          "description": "Serialized list of LLNodes"
+        },
+        "headId": {
+          "type": "string",
+          "description": "Identifier of the head node"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last update timestamp"
+        }
+      },
+      "required": ["id", "userId", "name", "mode", "nodes"]
+    },
+    "ChatSession": {
+      "title": "Chat Session",
+      "description": "Gemini AI tutor chat session thread.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique chat thread ID"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner user ID"
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of conversation",
+          "maxLength": 120
+        },
+        "role": {
+          "type": "string",
+          "description": "System role (Tutor, Code Reviewer, Examiner)"
+        },
+        "model": {
+          "type": "string",
+          "description": "Gemini model used"
+        },
+        "messages": {
+          "type": "array",
+          "description": "List of multi-turn chat messages"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last message timestamp"
+        }
+      },
+      "required": ["id", "userId", "messages"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/User"
+      },
+      "description": "User profile collection"
+    },
+    "/users/{userId}/progress/{progressId}": {
+      "schema": {
+        "$ref": "#/entities/UserProgress"
+      },
+      "description": "User Chapter 5 syllabus progress tracking"
+    },
+    "/users/{userId}/savedLists/{listId}": {
+      "schema": {
+        "$ref": "#/entities/SavedList"
+      },
+      "description": "User saved linked lists and playground states"
+    },
+    "/users/{userId}/chats/{chatId}": {
+      "schema": {
+        "$ref": "#/entities/ChatSession"
+      },
+      "description": "User Gemini chatbot conversation threads"
+    }
+  }
+}

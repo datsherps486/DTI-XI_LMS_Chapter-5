@@ -13,6 +13,7 @@ import {
   RotateCcw,
   Footprints,
   ArrowUpDown,
+  Cloud,
 } from 'lucide-react';
 
 interface OperationToolbarProps {
@@ -23,6 +24,7 @@ interface OperationToolbarProps {
   onRandomize: () => void;
   onClear: () => void;
   onResetToOriginal: () => void;
+  onOpenCloudModal?: () => void;
   disabled?: boolean;
 }
 
@@ -34,6 +36,7 @@ export const OperationToolbar: React.FC<OperationToolbarProps> = ({
   onRandomize,
   onClear,
   onResetToOriginal,
+  onOpenCloudModal,
   disabled = false,
 }) => {
   const [insertVal, setInsertVal] = useState<string>('99');
@@ -130,6 +133,22 @@ export const OperationToolbar: React.FC<OperationToolbarProps> = ({
             </div>
           )}
         </div>
+
+        {/* Cloud Saved Lists */}
+        {onOpenCloudModal && (
+          <button
+            disabled={disabled}
+            onClick={() => {
+              soundManager.playClick();
+              onOpenCloudModal();
+            }}
+            title="Open Cloud Saved Lists"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-300 bg-slate-950 border border-slate-800 hover:border-indigo-600/60 hover:bg-slate-900 rounded-lg transition-colors disabled:opacity-40"
+          >
+            <Cloud className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Cloud Lists</span>
+          </button>
+        )}
       </div>
 
       {/* Right: Chapter 5 Core Operations */}

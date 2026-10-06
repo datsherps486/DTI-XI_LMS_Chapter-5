@@ -1,13 +1,13 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AlgorithmStep } from '../../types/linkedList';
-import { Play, Pause, SkipForward, SkipBack, RotateCcw, Clock } from 'lucide-react';
+import { Play, Pause, SkipForward, SkipBack, RotateCcw, Clock, Sparkles } from 'lucide-react';
 import { soundManager } from '../../utils/audio';
 
 interface AlgorithmPlayerProps {
   steps: AlgorithmStep[];
   currentStepIndex: number;
   isPlaying: boolean;
-  playbackSpeed: number; // in milliseconds per step (e.g. 1000)
+  playbackSpeed: number; // in milliseconds per step (e.g. 2200)
   onStepChange: (index: number) => void;
   onTogglePlay: () => void;
   onSpeedChange: (speed: number) => void;
@@ -27,24 +27,49 @@ export const AlgorithmPlayer: React.FC<AlgorithmPlayerProps> = ({
   onResetToOriginal,
 }) => {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const [stepProgress, setStepProgress] = useState<number>(0);
+  const animFrameRef = useRef<number | null>(null);
+  const startTimeRef = useRef<number>(0);
 
   const currentStep = steps[currentStepIndex] || steps[0];
   const totalSteps = steps.length;
   const isFinished = currentStepIndex >= totalSteps - 1;
 
+  // Auto-play logic with smooth progress animation
   useEffect(() => {
     if (isPlaying) {
       if (isFinished) {
-        onTogglePlay(); // stop playing if at end
+        onTogglePlay(); // pause at end
+        setStepProgress(0);
         return;
       }
+
+      startTimeRef.current = performance.now();
+
+      const updateProgress = () => {
+        const elapsed = performance.now() - startTimeRef.current;
+        const ratio = Math.min(elapsed / playbackSpeed, 1);
+        setStepProgress(ratio);
+
+        if (ratio < 1 && isPlaying) {
+          animFrameRef.current = requestAnimationFrame(updateProgress);
+        }
+      };
+
+      animFrameRef.current = requestAnimationFrame(updateProgress);
+
       timerRef.current = setTimeout(() => {
+        setStepProgress(0);
         onStepChange(currentStepIndex + 1);
         soundManager.playStep();
       }, playbackSpeed);
+    } else {
+      setStepProgress(0);
     }
+
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
   }, [isPlaying, currentStepIndex, isFinished, playbackSpeed, onStepChange, onTogglePlay]);
 
@@ -62,10 +87,27 @@ export const AlgorithmPlayer: React.FC<AlgorithmPlayerProps> = ({
     }
   };
 
+  const handlePlayButtonClick = () => {
+    if (isFinished) {
+      // Replay from beginning
+      onStepChange(0);
+      soundManager.playClick();
+      if (!isPlaying) {
+        onTogglePlay();
+      }
+    } else {
+      soundManager.playClick();
+      onTogglePlay();
+    }
+  };
+
+  // Expanded speed presets with ultra-clear student-focused slow tiers
   const speedOptions = [
-    { label: '0.5×', ms: 1800 },
-    { label: '1×', ms: 1000 },
-    { label: '2×', ms: 500 },
+    { label: '0.25× Ultra Slow (3.5s)', short: '0.25×', ms: 3500 },
+    { label: '0.5× Slow (2.2s)', short: '0.5×', ms: 2200 },
+    { label: '0.75× Moderate (1.5s)', short: '0.75×', ms: 1500 },
+    { label: '1× Normal (1.0s)', short: '1×', ms: 1000 },
+    { label: '1.5× Fast (0.6s)', short: '1.5×', ms: 600 },
   ];
 
   if (!currentStep) return null;
@@ -79,25 +121,37 @@ export const AlgorithmPlayer: React.FC<AlgorithmPlayerProps> = ({
             Step {currentStep.stepIndex} of {totalSteps}
           </span>
           <span className="text-slate-600">·</span>
-          <span className="text-sm font-semibold text-slate-100">{currentStep.title}</span>
+          <span className="text-sm font-semibold text-slate-100 flex items-center gap-2">
+            <span>{currentStep.title}</span>
+            {isPlaying && (
+              <span className="flex items-center gap-1 text-[11px] font-normal text-amber-300 bg-amber-950/60 border border-amber-800/60 px-2 py-0.5 rounded-full animate-pulse">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                Live Demo ({Math.round(playbackSpeed / 100) / 10}s per step)
+              </span>
+            )}
+          </span>
         </div>
 
         {/* Speed & Media Controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {/* Speed Selector */}
           <div className="flex items-center bg-slate-950 border border-slate-800 rounded-lg p-0.5 text-xs text-slate-400">
-            <Clock className="w-3 h-3 ml-2 mr-1 text-slate-400" />
+            <span className="flex items-center gap-1 pl-2 pr-1.5 text-[11px] text-slate-400 font-medium">
+              <Clock className="w-3 h-3 text-slate-400" />
+              <span>Speed:</span>
+            </span>
             {speedOptions.map((opt) => (
               <button
-                key={opt.label}
+                key={opt.ms}
                 onClick={() => onSpeedChange(opt.ms)}
+                title={opt.label}
                 className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
                   playbackSpeed === opt.ms
                     ? 'bg-indigo-600 text-white shadow-sm'
                     : 'hover:text-slate-200'
                 }`}
               >
-                {opt.label}
+                {opt.short}
               </button>
             ))}
           </div>
@@ -120,12 +174,12 @@ export const AlgorithmPlayer: React.FC<AlgorithmPlayerProps> = ({
               <SkipBack className="w-4 h-4" />
             </button>
             <button
-              onClick={onTogglePlay}
-              title={isPlaying ? 'Pause' : 'Auto Play'}
-              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-medium text-xs flex items-center gap-1.5 transition-colors shadow-sm"
+              onClick={handlePlayButtonClick}
+              title={isPlaying ? 'Pause Demo' : isFinished ? 'Replay Demo from Step 1' : 'Play Step-by-Step Demo'}
+              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-semibold text-xs flex items-center gap-1.5 transition-colors shadow-sm"
             >
               {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-current" />}
-              <span>{isPlaying ? 'Pause' : isFinished ? 'Replay' : 'Play'}</span>
+              <span>{isPlaying ? 'Pause' : isFinished ? 'Replay' : 'Play Slow Demo'}</span>
             </button>
             <button
               onClick={handleNext}
@@ -144,30 +198,40 @@ export const AlgorithmPlayer: React.FC<AlgorithmPlayerProps> = ({
               className="px-2.5 py-1.5 bg-slate-950 border border-slate-800 hover:bg-slate-800 text-sky-400 hover:text-sky-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span>Reset to Original</span>
+              <span>Reset List</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* Progress Bar */}
-      <div className="w-full bg-slate-950 h-1.5 rounded-full overflow-hidden border border-slate-800">
-        <div
-          className="bg-gradient-to-r from-indigo-500 to-sky-400 h-full transition-all duration-200"
-          style={{ width: `${((currentStepIndex + 1) / totalSteps) * 100}%` }}
-        />
+      {/* Two-Tier Progress Bar: Overall Step Progress + Current Step Time Buffer */}
+      <div className="space-y-1">
+        <div className="w-full bg-slate-950 h-1.5 rounded-full overflow-hidden border border-slate-800">
+          <div
+            className="bg-gradient-to-r from-indigo-500 to-sky-400 h-full transition-all duration-300"
+            style={{ width: `${((currentStepIndex + 1) / totalSteps) * 100}%` }}
+          />
+        </div>
+        {isPlaying && (
+          <div className="w-full bg-slate-950 h-0.5 rounded-full overflow-hidden">
+            <div
+              className="bg-amber-400 h-full transition-all duration-75"
+              style={{ width: `${stepProgress * 100}%` }}
+            />
+          </div>
+        )}
       </div>
 
       {/* Step Explanation Callout */}
-      <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-lg flex items-start justify-between gap-3">
+      <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl flex items-start justify-between gap-3">
         <div className="flex items-start gap-2.5">
-          <div className="w-2 h-2 rounded-full bg-sky-400 mt-1.5 shrink-0" />
-          <p className="text-sm text-slate-300 leading-relaxed">
+          <div className="w-2.5 h-2.5 rounded-full bg-sky-400 mt-1 shrink-0 animate-ping" />
+          <p className="text-sm text-slate-200 leading-relaxed font-normal">
             {currentStep.description}
           </p>
         </div>
         {currentStep.syllabusReference && (
-          <span className="text-[10px] font-mono text-indigo-300 bg-indigo-950/70 border border-indigo-700/40 px-2 py-0.5 rounded shrink-0 whitespace-nowrap">
+          <span className="text-[10px] font-mono text-indigo-300 bg-indigo-950/80 border border-indigo-700/50 px-2 py-0.5 rounded shrink-0 whitespace-nowrap">
             {currentStep.syllabusReference}
           </span>
         )}
